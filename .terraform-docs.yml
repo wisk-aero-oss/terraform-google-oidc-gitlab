@@ -54,8 +54,8 @@ content: |-
   {{"    " -}} source = "wisk-aero-oss/<module-name>/google"
   {{"    " -}} # Recommend pinning every module to a specific version
   {{"    " -}} # version = "x.x.x"
-  {{- if .Module.RequiredInputs }}
-    {{"\n    " -}} # Required variables
+  {{- if .Module.RequiredInputs -}}
+    {{"\n    "}}# Required variables
     {{- range .Module.RequiredInputs }}
       {{"    " -}}{{ .Name }} ={{ .GetValue }}
     {{- end }}
