@@ -61,6 +61,7 @@
 #https://github.com/terraform-google-modules/terraform-google-github-actions-runners/tree/main/modules/gh-oidc
 #https://github.com/terraform-google-modules/terraform-google-github-actions-runners/tree/main/examples/oidc-simple
 
+# Create pool per GitLab team ??
 resource "google_iam_workload_identity_pool" "main" {
   #provider                  = google-beta
   project                   = var.project_id
@@ -70,6 +71,10 @@ resource "google_iam_workload_identity_pool" "main" {
   disabled                  = false
 }
 
+data "http" "jwk" {
+  count = var.private_server ? 1 : 0
+  url   = "${var.issuer_uri}/oauth/discovery/keys"
+}
 resource "google_iam_workload_identity_pool_provider" "main" {
   #provider                           = google-beta
   project                            = var.project_id
@@ -81,11 +86,11 @@ resource "google_iam_workload_identity_pool_provider" "main" {
   # attribute_condition = "assertion.namespace_path.startsWith(\"${var.gitlab_namespace_path}\")"
   attribute_mapping = var.attribute_mapping
   oidc {
-    allowed_audiences = var.allowed_audiences
+    allowed_audiences = var.private_server ? [] : var.allowed_audiences
     issuer_uri        = var.issuer_uri
+    jwks_json         = var.private_server ? data.http.jwk[0].response_body : ""
   }
 }
-
 
 locals {
   sa_mappings = flatten([

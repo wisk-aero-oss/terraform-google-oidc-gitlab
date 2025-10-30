@@ -20,6 +20,11 @@ variable "pool_description" {
   description = "Workload Identity Pool description"
   default     = "Workload Identity Pool managed by Terraform"
 }
+variable "private_server" {
+  description = "Provider (GitLab) server is private?"
+  type        = bool
+  default     = true
+}
 
 variable "provider_id" {
   type        = string
@@ -32,16 +37,21 @@ variable "issuer_uri" {
   default     = "https://gitlab.com"
 }
 
-variable "provider_display_name" {
-  type        = string
-  description = "Workload Identity Pool Provider display name"
-  default     = null
-}
 
 variable "provider_description" {
   type        = string
   description = "Workload Identity Pool Provider description"
   default     = "Workload Identity Pool Provider managed by Terraform"
+}
+variable "provider_display_name" {
+  type        = string
+  description = "Workload Identity Pool Provider display name"
+  default     = null
+}
+variable "allowed_audiences" {
+  type        = list(string)
+  description = "Workload Identity Pool Provider allowed audiences."
+  default     = []
 }
 
 variable "attribute_condition" {
@@ -53,14 +63,14 @@ variable "attribute_condition" {
 variable "attribute_mapping" {
   type        = map(any)
   description = "Workload Identity Pool Provider attribute mapping. [More info](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iam_workload_identity_pool_provider#attribute_mapping)"
-  default = {
+  default = {                           # GitLab
     "google.subject" = "assertion.sub", # Required
     "attribute.aud"  = "assertion.aud",
     # ci_pipeline_id or pipeline_id
     # ci_job_id or job_id
     "attribute.project_path"   = "assertion.project_path", # group/project
-    "attribute.project_id"     = "assertion.project_id",
-    "attribute.namespace_id"   = "assertion.namespace_id", # Group
+    "attribute.project_id"     = "assertion.project_id",   # Project number
+    "attribute.namespace_id"   = "assertion.namespace_id", # Group number
     "attribute.namespace_path" = "assertion.namespace_path",
     "attribute.user_email"     = "assertion.user_email",
     "attribute.ref"            = "assertion.ref",
@@ -68,11 +78,6 @@ variable "attribute_mapping" {
   }
 }
 
-variable "allowed_audiences" {
-  type        = list(string)
-  description = "Workload Identity Pool Provider allowed audiences."
-  default     = []
-}
 variable "service_accounts" {
   description = "Service account to manage and link to WIF"
   type = map(object({

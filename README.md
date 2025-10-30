@@ -37,12 +37,14 @@ module "example" {
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.1 |
+| <a name="requirement_http"></a> [http](#requirement\_http) | ~> 3.4 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | 7.9.0 |
+| <a name="provider_http"></a> [http](#provider\_http) | 3.5.0 |
 
 ## Modules
 
@@ -59,6 +61,7 @@ No modules.
 | [google_project_iam_member.sa](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_service_account.sa](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
 | [google_service_account_iam_member.wif-sa](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
+| [http_http.jwk](https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http) | data source |
 
 ## Inputs
 
@@ -71,6 +74,7 @@ No modules.
 | <a name="input_pool_description"></a> [pool\_description](#input\_pool\_description) | Workload Identity Pool description | `string` | `"Workload Identity Pool managed by Terraform"` | no |
 | <a name="input_pool_display_name"></a> [pool\_display\_name](#input\_pool\_display\_name) | Workload Identity Pool display name | `string` | `null` | no |
 | <a name="input_pool_id"></a> [pool\_id](#input\_pool\_id) | Workload Identity Pool ID | `string` | n/a | yes |
+| <a name="input_private_server"></a> [private\_server](#input\_private\_server) | Provider (GitLab) server is private? | `bool` | `true` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project id to create Workload Identity Pool | `string` | n/a | yes |
 | <a name="input_provider_description"></a> [provider\_description](#input\_provider\_description) | Workload Identity Pool Provider description | `string` | `"Workload Identity Pool Provider managed by Terraform"` | no |
 | <a name="input_provider_display_name"></a> [provider\_display\_name](#input\_provider\_display\_name) | Workload Identity Pool Provider display name | `string` | `null` | no |
