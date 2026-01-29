@@ -1,12 +1,12 @@
 
 output "pool_name" {
   description = "Pool name"
-  value       = google_iam_workload_identity_pool.main.name
+  value       = [for pool in google_iam_workload_identity_pool.main : pool.name]
 }
 
 output "provider_name" {
   description = "Provider name"
-  value       = google_iam_workload_identity_pool_provider.main.name
+  value       = [for provider in google_iam_workload_identity_pool_provider.main : provider.name]
 }
 
 # Debugging
@@ -15,6 +15,6 @@ output "sa_mappings" {
   value       = local.sa_mappings
 }
 output "sa_roles" {
-  description = "Roles to bind to ervice accounts"
+  description = "Roles to bind to service accounts"
   value       = local.sa_roles
 }

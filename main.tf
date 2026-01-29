@@ -61,28 +61,44 @@
 #https://github.com/terraform-google-modules/terraform-google-github-actions-runners/tree/main/modules/gh-oidc
 #https://github.com/terraform-google-modules/terraform-google-github-actions-runners/tree/main/examples/oidc-simple
 
-# Create pool per GitLab team ??
+
+#locals {
+#  tmpl_pool_name     = "projects/${var.project_id}/locations/global/workloadIdentityPools/$${pool}"
+#  tmpl_provider_name = "projects/${var.project_id}/locations/global/workloadIdentityPools/$${pool}/providers/$${provider}"
+#}
+#output "result" {
+#  value = templatestring(local.tmpl_, { pool = "POOL", provider = "PROVIDER" })
+#}
+
 resource "google_iam_workload_identity_pool" "main" {
-  #provider                  = google-beta
+  for_each                  = var.wif_pools
   project                   = var.project_id
-  workload_identity_pool_id = var.pool_id
-  display_name              = var.pool_display_name
-  description               = var.pool_description
+  workload_identity_pool_id = each.key
+  display_name              = each.value.display_name
+  description               = each.value.description
   disabled                  = false
 }
-
+# FIX: whitespace always changes
 data "http" "jwk" {
   count = var.private_server ? 1 : 0
   url   = "${var.issuer_uri}/oauth/discovery/keys"
 }
+
+#trivy:ignore:AVD-GCP-0068
 resource "google_iam_workload_identity_pool_provider" "main" {
-  #provider                           = google-beta
+  for_each = merge(flatten([ # convert to colasped map
+    for poolkey, pool in var.wif_pools :
+    { for providerkey, provider in pool.providers :
+      "${poolkey}::${providerkey}" => provider
+    }
+  ])...)
+
   project                            = var.project_id
-  workload_identity_pool_id          = google_iam_workload_identity_pool.main.workload_identity_pool_id
-  workload_identity_pool_provider_id = var.provider_id
-  display_name                       = var.provider_display_name
-  description                        = var.provider_description
-  attribute_condition                = var.attribute_condition
+  workload_identity_pool_id          = google_iam_workload_identity_pool.main[split("::", each.key)[0]].workload_identity_pool_id
+  workload_identity_pool_provider_id = split("::", each.key)[1]
+  display_name                       = each.value.display_name
+  description                        = each.value.description
+  attribute_condition                = each.value.attribute_condition
   # attribute_condition = "assertion.namespace_path.startsWith(\"${var.gitlab_namespace_path}\")"
   attribute_mapping = var.attribute_mapping
   oidc {
@@ -92,13 +108,64 @@ resource "google_iam_workload_identity_pool_provider" "main" {
   }
 }
 
+###---------------------------------------
+### WIF Identity permissions
+###---------------------------------------
+# Grant permissions to WIF identity
+#   GitLab GCP Secret Manager integration uses it this way
 locals {
+  ## attibute::role -> pool::attibute::role
+  wif_identity_roles = flatten([
+    for identity in var.wif_identity_roles : [
+      for role in identity.roles :
+      "${identity.pool}::${identity.attribute}::${role}"
+    ]
+  ])
+  # FIX: Can't do this for multiple pools - could do template
+  #wif_principle_path = "://iam.googleapis.com/${google_iam_workload_identity_pool.main.name}/"
+}
+# ADD: support for conditions or convert to use iam-members
+resource "google_project_iam_member" "wif_identity" {
+  for_each = toset(local.wif_identity_roles)
+  project  = var.project_id
+  # TODO: need to dynamically build?
+  member = (length(regexall("^subject", split("::", each.value)[1])) > 0 ?
+    "principal://iam.googleapis.com/${google_iam_workload_identity_pool.main[split("::", each.value)[0]].name}/${split("::", each.value)[1]}" :
+    "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.main[split("::", each.value)[0]].name}/${split("::", each.value)[1]}"
+  )
+  #member = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.main.name}/${split("::", each.value)[0]}"
+  # principalSet://iam.googleapis.com/projects/890158812569/locations/global/workloadIdentityPools/gitlab/attribute.project_path/devops/terraform
+  role = "roles/${split("::", each.value)[2]}"
+}
+
+###---------------------------------------
+### Service Accounts for impersonation
+###---------------------------------------
+# Manage service accounts, WIF identity to service account mappings, and permissions
+#   GitLab pipelines impersonate the service account
+resource "google_service_account" "sa" {
+  for_each     = var.service_accounts
+  account_id   = each.key
+  display_name = each.value.display_name
+  description  = each.value.description
+  project      = each.value.project
+}
+locals {
+  # service_account::service account allowed to impersonate
+  sa_impersonations = flatten([
+    for s, sa in var.service_accounts : [
+      for sa_imp in sa.can_impersonate :
+      "${s}::${sa_imp}"
+    ]
+  ])
+  # service_account::attribute -> service_account::pool::attribute
   sa_mappings = flatten([
     for s, sa in var.service_accounts : [
       for attribute in sa.attributes :
-      "${s}::${attribute}"
+      "${s}::${attribute.pool}::${attribute.attribute}"
     ]
   ])
+  # service_account::resource_type::resource_id::role
   sa_roles = flatten([
     for s, sa in var.service_accounts :
     [
@@ -109,41 +176,71 @@ locals {
     ]
   ])
 }
-resource "google_service_account" "sa" {
-  for_each     = var.service_accounts
-  account_id   = each.key
-  display_name = each.value.display_name
-  description  = each.value.description
-  project      = each.value.project
-}
-# Attributes
+# Attributes - Grant WIF identity access to impersonate service account
 resource "google_service_account_iam_member" "wif-sa" {
   for_each           = toset(local.sa_mappings)
   service_account_id = google_service_account.sa[split("::", each.value)[0]].id
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.main.name}/${split("::", each.value)[1]}"
+  member = (length(regexall("^subject", split("::", each.value)[2])) > 0 ?
+    #"principal${local.wif_principle_path}${split("::", each.value)[2]}" :
+    #"principalSet${local.wif_principle_path}${split("::", each.value)[2]}"
+    "principal://iam.googleapis.com/${google_iam_workload_identity_pool.main[split("::", each.value)[1]].name}/${split("::", each.value)[2]}" :
+    "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.main[split("::", each.value)[1]].name}/${split("::", each.value)[2]}"
+  )
+
+  #member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.main.name}/${split("::", each.value)[1]}"
   # Grant to GitLab project
   #"principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.gitlab-pool.name}/attribute.project_id/${var.gitlab_project_id}"
 }
-# Permission bindings
-resource "google_folder_iam_member" "sa" {
-  for_each = toset([for binding in local.sa_roles : binding if "folder" == split("::", binding)[1]])
-  folder   = split("::", each.value)[2]
-  member   = google_service_account.sa[split("::", each.value)[0]].member
-  role     = "roles/${split("::", each.value)[3]}"
+# Grant service account to impersonate other service accounts
+resource "google_service_account_iam_member" "sa-sa" {
+  for_each           = toset(local.sa_impersonations)
+  service_account_id = google_service_account.sa[split("::", each.value)[1]].id
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = google_service_account.sa[split("::", each.value)[0]].member
+  #  "principal://iam.googleapis.com/${google_iam_workload_identity_pool.main[split("::", each.value)[1]].name}/${split("::", each.value)[2]}"
+  # google_service_account.sa[split("::", each.value)[0]].id
 }
-resource "google_organization_iam_member" "sa" {
-  for_each = toset([for binding in local.sa_roles : binding if "organization" == split("::", binding)[1]])
-  org_id   = split("::", each.value)[2]
-  member   = google_service_account.sa[split("::", each.value)[0]].member
-  role     = "roles/${split("::", each.value)[3]}"
+
+# Grant service account permissions
+module "sa_permissions" {
+  #source = "../terraform-google-iam-members"
+  source  = "wisk-aero-oss/iam-members/google"
+  version = "0.2.1"
+
+  for_each = toset([for binding in local.sa_roles : binding])
+
+  folder_id       = "folder" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
+  project_id      = "project" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
+  organization_id = "organization" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
+
+  #project_id = module.projects[split("::", each.value)[0]].project_id
+  members = [
+    {
+      member = google_service_account.sa[split("::", each.value)[0]].member
+      roles  = [{ role = split("::", each.value)[3] }]
+    }
+  ]
 }
-resource "google_project_iam_member" "sa" {
-  for_each = toset([for binding in local.sa_roles : binding if "project" == split("::", binding)[1]])
-  project  = split("::", each.value)[2]
-  member   = google_service_account.sa[split("::", each.value)[0]].member
-  role     = "roles/${split("::", each.value)[3]}"
-}
+
+#resource "google_folder_iam_member" "sa" {
+#  for_each = toset([for binding in local.sa_roles : binding if "folder" == split("::", binding)[1]])
+#  folder   = split("::", each.value)[2]
+#  member   = google_service_account.sa[split("::", each.value)[0]].member
+#  role     = "roles/${split("::", each.value)[3]}"
+#}
+#resource "google_organization_iam_member" "sa" {
+#  for_each = toset([for binding in local.sa_roles : binding if "organization" == split("::", binding)[1]])
+#  org_id   = split("::", each.value)[2]
+#  member   = google_service_account.sa[split("::", each.value)[0]].member
+#  role     = "roles/${split("::", each.value)[3]}"
+#}
+#resource "google_project_iam_member" "sa" {
+#  for_each = toset([for binding in local.sa_roles : binding if "project" == split("::", binding)[1]])
+#  project  = split("::", each.value)[2]
+#  member   = google_service_account.sa[split("::", each.value)[0]].member
+#  role     = "roles/${split("::", each.value)[3]}"
+#}
 
 #resource "google_service_account_iam_member" "sa_" {
 #locals {
