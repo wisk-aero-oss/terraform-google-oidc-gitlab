@@ -150,6 +150,7 @@ resource "google_service_account" "sa" {
   description  = each.value.description
   project      = each.value.project
 }
+
 locals {
   # service_account::service account allowed to impersonate
   sa_impersonations = flatten([

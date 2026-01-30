@@ -82,6 +82,7 @@ module "example" {
 |------|-------------|
 | <a name="output_pool_name"></a> [pool\_name](#output\_pool\_name) | Pool name |
 | <a name="output_provider_name"></a> [provider\_name](#output\_provider\_name) | Provider name |
+| <a name="output_sa_emails"></a> [sa\_emails](#output\_sa\_emails) | Service Account emails |
 | <a name="output_sa_mappings"></a> [sa\_mappings](#output\_sa\_mappings) | WIF service account attribute mappings |
 | <a name="output_sa_roles"></a> [sa\_roles](#output\_sa\_roles) | Roles to bind to service accounts |
 
