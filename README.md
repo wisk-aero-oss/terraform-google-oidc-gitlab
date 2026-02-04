@@ -42,14 +42,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.17.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.18.0 |
 | <a name="provider_http"></a> [http](#provider\_http) | 3.5.0 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_sa_permissions"></a> [sa\_permissions](#module\_sa\_permissions) | wisk-aero-oss/iam-members/google | 0.2.1 |
+| <a name="module_sa_permissions"></a> [sa\_permissions](#module\_sa\_permissions) | wisk-aero-oss/iam-members/google | 0.2.2 |
 
 ## Resources
 

@@ -194,11 +194,24 @@ resource "google_service_account_iam_member" "wif-sa" {
   #"principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.gitlab-pool.name}/attribute.project_id/${var.gitlab_project_id}"
 }
 # Grant service account to impersonate other service accounts
+# TODO: support specifing full service_account_id
+#     projects/{{project}}/serviceAccounts/{{email}}
+#   if email (devops-read@devops-ad24.iam.gserviceaccount.com)
+#     regex /^[a-z-]+@([a-z0-9-]+)[.]iam\.gserviceaccount\.com$/
+#locals {
+#  pattern_sa = "^[a-z-]+@([a-z0-9-]+)[.]iam[.]gserviceaccount[.]com$"
+#}
+# can(regex(local.pattern_sa, split("::", each.value)[1]))
+# ? "projects/${regex(local.pattern_sa, split("::", each.value)[1])}/serviceAccounts/${split("::", each.value)[1]}"
+# : google_service_account.sa[split("::", each.value)[1]].id
 resource "google_service_account_iam_member" "sa-sa" {
   for_each           = toset(local.sa_impersonations)
   service_account_id = google_service_account.sa[split("::", each.value)[1]].id
-  role               = "roles/iam.serviceAccountTokenCreator"
-  member             = google_service_account.sa[split("::", each.value)[0]].member
+  # can(regex(local.pattern_sa, split("::", each.value)[1]))
+  # ? "projects/${regex(local.pattern_sa, split("::", each.value)[1])}/serviceAccounts/${split("::", each.value)[1]}"
+  # : google_service_account.sa[split("::", each.value)[1]].id
+  role   = "roles/iam.serviceAccountTokenCreator"
+  member = google_service_account.sa[split("::", each.value)[0]].member
   #  "principal://iam.googleapis.com/${google_iam_workload_identity_pool.main[split("::", each.value)[1]].name}/${split("::", each.value)[2]}"
   # google_service_account.sa[split("::", each.value)[0]].id
 }
@@ -207,7 +220,7 @@ resource "google_service_account_iam_member" "sa-sa" {
 module "sa_permissions" {
   #source = "../terraform-google-iam-members"
   source  = "wisk-aero-oss/iam-members/google"
-  version = "0.2.1"
+  version = "0.2.2"
 
   for_each = toset([for binding in local.sa_roles : binding])
 
