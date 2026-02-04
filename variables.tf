@@ -58,6 +58,11 @@ variable "attribute_mapping" {
 #attribute.user_id=assertion.user_id,\
 #attribute.user_login=assertion.user_login,\
 #google.subject=assertion.sub"
+variable "organization_id" {
+  description = "GCP Organization ID for access to custom organization roles"
+  type        = string
+  default     = ""
+}
 
 variable "service_accounts" {
   description = "Service account to manage and link to WIF"

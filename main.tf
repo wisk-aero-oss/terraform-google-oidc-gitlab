@@ -226,8 +226,7 @@ module "sa_permissions" {
 
   folder_id       = "folder" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
   project_id      = "project" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
-  organization_id = "organization" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
-
+  organization_id = "organization" == split("::", each.value)[1] ? split("::", each.value)[2] : var.organization_id
   #project_id = module.projects[split("::", each.value)[0]].project_id
   members = [
     {
