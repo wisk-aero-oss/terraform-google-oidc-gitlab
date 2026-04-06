@@ -231,7 +231,14 @@ module "sa_permissions" {
   members = [
     {
       member = google_service_account.sa[split("::", each.value)[0]].member
-      roles  = [{ role = split("::", each.value)[3] }]
+      roles = length(split(":", split("::", each.value)[3])) < 3 ? [
+        { role = split("::", each.value)[3] }
+        ] : [
+        {
+          resource = join(":", [for i in [0, 2] : split(":", (split("::", each.value)[3]))[i]])
+          role     = split(":", (split("::", each.value)[3]))[1]
+        }
+      ]
     }
   ]
 }
