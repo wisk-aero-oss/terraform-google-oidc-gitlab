@@ -57,7 +57,7 @@ run "verify_sa_permissions_logic" {
 
   # Test that the binding without location inherits the global location
   assert {
-    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer::"].default_location == "global"
+    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer"].default_location == "global"
     error_message = "Binding without location should inherit global location"
   }
 
@@ -74,7 +74,7 @@ run "verify_sa_permissions_logic" {
 
   # Verify the role location as well
   assert {
-    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer::"].members[0].roles[0].location == "global"
+    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer"].members[0].roles[0].location == "global"
     error_message = "Role location should inherit global location"
   }
 
@@ -103,17 +103,17 @@ run "verify_sa_permissions_no_global_location" {
   }
 
   assert {
-    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer::"].default_location == null
+    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer"].default_location == null
     error_message = "Default location should be null if not provided globally or in binding"
   }
 
   assert {
-    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer::"].members[0].roles[0].role == "roles/viewer"
+    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer"].members[0].roles[0].role == "roles/viewer"
     error_message = "Role should be viewer"
   }
 
   assert {
-    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer::"].members[0].roles[0].location == null
+    condition     = local.sa_permissions_config["test-sa::project::test-project::roles/viewer"].members[0].roles[0].location == null
     error_message = "Role location should be null"
   }
 

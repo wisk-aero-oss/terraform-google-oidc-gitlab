@@ -213,13 +213,13 @@ locals {
     ]
   ])
 
-  # service_account::resource_type::resource_id::role::location
+  # service_account::resource_type::resource_id::role[::location]
   sa_roles = flatten([
     for s, sa in var.service_accounts :
     [
       for b, binding in sa.bindings : [
         for role in binding.roles :
-        "${s}::${binding.resource_type}::${binding.resource_id}::${role}::${binding.location != null ? binding.location : ""}"
+        "${s}::${binding.resource_type}::${binding.resource_id}::${role}${binding.location != null ? "::${binding.location}" : ""}"
       ]
     ]
   ])
@@ -229,20 +229,20 @@ locals {
       folder_id        = "folder" == split("::", binding)[1] ? split("::", binding)[2] : ""
       project_id       = "project" == split("::", binding)[1] ? split("::", binding)[2] : ""
       organization_id  = "organization" == split("::", binding)[1] ? split("::", binding)[2] : var.organization_id
-      default_location = split("::", binding)[4] != "" ? split("::", binding)[4] : var.location
+      default_location = try(split("::", binding)[4], null) != null ? split("::", binding)[4] : var.location
       members = [
         {
           member = google_service_account.sa[split("::", binding)[0]].member
           roles = length(split(":", split("::", binding)[3])) < 3 ? [
             {
               role     = split("::", binding)[3]
-              location = split("::", binding)[4] != "" ? split("::", binding)[4] : var.location
+              location = try(split("::", binding)[4], null) != null ? split("::", binding)[4] : var.location
             }
             ] : [
             {
               resource = "${split(":", (split("::", binding)[3]))[0]}:${split(":", (split("::", binding)[3]))[2]}"
               role     = split(":", (split("::", binding)[3]))[1]
-              location = split("::", binding)[4] != "" ? split("::", binding)[4] : var.location
+              location = try(split("::", binding)[4], null) != null ? split("::", binding)[4] : var.location
             }
           ]
         }
