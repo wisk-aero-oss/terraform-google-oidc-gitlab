@@ -166,13 +166,13 @@ locals {
       "${s}::${attribute.pool}::${attribute.attribute}"
     ]
   ])
-  # service_account::resource_type::resource_id::role
+  # service_account::resource_type::resource_id::role::location
   sa_roles = flatten([
     for s, sa in var.service_accounts :
     [
       for b, binding in sa.bindings : [
         for role in binding.roles :
-        "${s}::${binding.resource_type}::${binding.resource_id}::${role}"
+        "${s}::${binding.resource_type}::${binding.resource_id}::${role}::${binding.location != null ? binding.location : ""}"
       ]
     ]
   ])
@@ -224,19 +224,24 @@ module "sa_permissions" {
 
   for_each = toset([for binding in local.sa_roles : binding])
 
-  folder_id       = "folder" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
-  project_id      = "project" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
-  organization_id = "organization" == split("::", each.value)[1] ? split("::", each.value)[2] : var.organization_id
+  folder_id        = "folder" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
+  project_id       = "project" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
+  organization_id  = "organization" == split("::", each.value)[1] ? split("::", each.value)[2] : var.organization_id
+  default_location = split("::", each.value)[4] != "" ? split("::", each.value)[4] : var.location
   #project_id = module.projects[split("::", each.value)[0]].project_id
   members = [
     {
       member = google_service_account.sa[split("::", each.value)[0]].member
       roles = length(split(":", split("::", each.value)[3])) < 3 ? [
-        { role = split("::", each.value)[3] }
+        {
+          role     = split("::", each.value)[3]
+          location = split("::", each.value)[4] != "" ? split("::", each.value)[4] : var.location
+        }
         ] : [
         {
           resource = join(":", [for i in [0, 2] : split(":", (split("::", each.value)[3]))[i]])
           role     = split(":", (split("::", each.value)[3]))[1]
+          location = split("::", each.value)[4] != "" ? split("::", each.value)[4] : var.location
         }
       ]
     }
