@@ -17,7 +17,7 @@
  *
  *  The `roles` list for a binding can be:
  *  - A simple role: `roles/viewer` (grants permission to the entire project/folder/org).
- *  - A resource-specific role: `RESOURCE_TYPE:ROLE:RESOURCE_NAME` (e.g. `storage:roles/storage.objectViewer:my-bucket`).
+ *  - A resource-specific role: `RESOURCE_TYPE:ROLE:RESOURCE_NAME` (e.g. `artifact-registry:roles/artifactregistry.reader:my-repo`).
  *
  *  #### Project and Resource specific permissions
  *
@@ -43,17 +43,14 @@
  *            roles         = ["roles/compute.viewer"]
  *          },
  *          {
- *            # Resource-specific permission
- *            resource_id   = "my-project"
- *            resource_type = "project"
- *            roles         = ["storage:roles/storage.objectViewer:my-bucket-name"]
- *          },
- *          {
  *            # Regional resource-specific permission
  *            resource_id   = "my-project"
  *            resource_type = "project"
- *            location      = "us-west1"
- *            roles         = ["artifact-registry:artifactregistry.writer:my-repo"]
+ *            location      = "us-central1"
+ *            roles         = [
+ *              "roles/compute.viewer",
+ *              "artifact-registry:roles/artifactregistry.reader:my-repo"
+ *            ]
  *          }
  *        ]
  *      }
@@ -215,6 +212,7 @@ locals {
       "${s}::${attribute.pool}::${attribute.attribute}"
     ]
   ])
+
   # service_account::resource_type::resource_id::role::location
   sa_roles = flatten([
     for s, sa in var.service_accounts :
@@ -225,6 +223,32 @@ locals {
       ]
     ]
   ])
+
+  sa_permissions_config = {
+    for binding in toset(local.sa_roles) : binding => {
+      folder_id        = "folder" == split("::", binding)[1] ? split("::", binding)[2] : ""
+      project_id       = "project" == split("::", binding)[1] ? split("::", binding)[2] : ""
+      organization_id  = "organization" == split("::", binding)[1] ? split("::", binding)[2] : var.organization_id
+      default_location = split("::", binding)[4] != "" ? split("::", binding)[4] : var.location
+      members = [
+        {
+          member = google_service_account.sa[split("::", binding)[0]].member
+          roles = length(split(":", split("::", binding)[3])) < 3 ? [
+            {
+              role     = split("::", binding)[3]
+              location = split("::", binding)[4] != "" ? split("::", binding)[4] : var.location
+            }
+            ] : [
+            {
+              resource = "${split(":", (split("::", binding)[3]))[0]}:${split(":", (split("::", binding)[3]))[2]}"
+              role     = split(":", (split("::", binding)[3]))[1]
+              location = split("::", binding)[4] != "" ? split("::", binding)[4] : var.location
+            }
+          ]
+        }
+      ]
+    }
+  }
 }
 # Attributes - Grant WIF identity access to impersonate service account
 resource "google_service_account_iam_member" "wif-sa" {
@@ -271,30 +295,13 @@ module "sa_permissions" {
   source  = "wisk-aero-oss/iam-members/google"
   version = "0.2.2"
 
-  for_each = toset([for binding in local.sa_roles : binding])
+  for_each = local.sa_permissions_config
 
-  folder_id        = "folder" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
-  project_id       = "project" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
-  organization_id  = "organization" == split("::", each.value)[1] ? split("::", each.value)[2] : var.organization_id
-  default_location = split("::", each.value)[4] != "" ? split("::", each.value)[4] : var.location
-  #project_id = module.projects[split("::", each.value)[0]].project_id
-  members = [
-    {
-      member = google_service_account.sa[split("::", each.value)[0]].member
-      roles = length(split(":", split("::", each.value)[3])) < 3 ? [
-        {
-          role     = split("::", each.value)[3]
-          location = split("::", each.value)[4] != "" ? split("::", each.value)[4] : var.location
-        }
-        ] : [
-        {
-          resource = join(":", [for i in [0, 2] : split(":", (split("::", each.value)[3]))[i]])
-          role     = split(":", (split("::", each.value)[3]))[1]
-          location = split("::", each.value)[4] != "" ? split("::", each.value)[4] : var.location
-        }
-      ]
-    }
-  ]
+  folder_id        = each.value.folder_id
+  project_id       = each.value.project_id
+  organization_id  = each.value.organization_id
+  default_location = each.value.default_location
+  members          = each.value.members
 }
 
 #resource "google_folder_iam_member" "sa" {

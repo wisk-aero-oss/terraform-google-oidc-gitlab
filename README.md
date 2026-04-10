@@ -16,7 +16,7 @@ Template for creating a Terraform module for Google
 
  The `roles` list for a binding can be:
  - A simple role: `roles/viewer` (grants permission to the entire project/folder/org).
- - A resource-specific role: `RESOURCE_TYPE:ROLE:RESOURCE_NAME` (e.g. `storage:roles/storage.objectViewer:my-bucket`).
+ - A resource-specific role: `RESOURCE_TYPE:ROLE:RESOURCE_NAME` (e.g. `artifact-registry:roles/artifactregistry.reader:my-repo`).
 
  #### Project and Resource specific permissions
 
@@ -42,17 +42,14 @@ Template for creating a Terraform module for Google
            roles         = ["roles/compute.viewer"]
          },
          {
-           # Resource-specific permission
-           resource_id   = "my-project"
-           resource_type = "project"
-           roles         = ["storage:roles/storage.objectViewer:my-bucket-name"]
-         },
-         {
            # Regional resource-specific permission
            resource_id   = "my-project"
            resource_type = "project"
-           location      = "us-west1"
-           roles         = ["artifact-registry:artifactregistry.writer:my-repo"]
+           location      = "us-central1"
+           roles         = [
+             "roles/compute.viewer",
+             "artifact-registry:roles/artifactregistry.reader:my-repo"
+           ]
          }
        ]
      }
