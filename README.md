@@ -12,6 +12,56 @@ Template for creating a Terraform module for Google
 - pre-commit setup
 - GitHub actions setup
 
+ ## Service Account Roles Examples
+
+ The `roles` list for a binding can be:
+ - A simple role: `roles/viewer` (grants permission to the entire project/folder/org).
+ - A resource-specific role: `RESOURCE_TYPE:ROLE:RESOURCE_NAME` (e.g. `storage:roles/storage.objectViewer:my-bucket`).
+
+ #### Project and Resource specific permissions
+
+ ```hcl
+ module "oidc_gitlab" {
+   source     = "wisk-aero-oss/oidc-gitlab/google"
+   project_id = "my-project"
+
+   # Optional global location
+   location = "global"
+
+   service_accounts = {
+     "my-sa" = {
+       display_name = "My Service Account"
+       description  = "SA for GitLab CI"
+       project      = "my-project"
+       attributes   = [ ... ]
+       bindings = [
+         {
+           # Project-level permission without specific location
+           resource_id   = "my-project"
+           resource_type = "project"
+           roles         = ["roles/compute.viewer"]
+         },
+         {
+           # Resource-specific permission
+           resource_id   = "my-project"
+           resource_type = "project"
+           roles         = ["storage:roles/storage.objectViewer:my-bucket-name"]
+         },
+         {
+           # Regional resource-specific permission
+           resource_id   = "my-project"
+           resource_type = "project"
+           location      = "us-west1"
+           roles         = ["artifact-registry:artifactregistry.writer:my-repo"]
+         }
+       ]
+     }
+   }
+
+   wif_identity_roles = [ ... ]
+ }
+ ```
+
 ## Usage
 
 Basic usage of this module is as follows:
@@ -25,58 +75,6 @@ module "example" {
         project_id =
         service_accounts =
         wif_identity_roles =
-}
-```
-
-## Examples
-
-### Service Account Roles
-
-The `roles` list for a binding can be:
-- A simple role: `roles/viewer` (grants permission to the entire project/folder/org).
-- A resource-specific role: `RESOURCE_NAME:ROLE:RESOURCE_TYPE` (e.g. `my-key:roles/cloudkms.cryptoKeyEncrypter:key-ring`).
-
-#### Project and Resource specific permissions
-
-```hcl
-module "oidc_gitlab" {
-  source     = "wisk-aero-oss/oidc-gitlab/google"
-  project_id = "my-project"
-
-  # Optional global location
-  location = "global"
-
-  service_accounts = {
-    "my-sa" = {
-      display_name = "My Service Account"
-      description  = "SA for GitLab CI"
-      project      = "my-project"
-      attributes   = [ ... ]
-      bindings = [
-        {
-          # Project-level permission without specific location
-          resource_id   = "my-project"
-          resource_type = "project"
-          roles         = ["roles/compute.viewer"]
-        },
-        {
-          # Resource-specific permission
-          resource_id   = "my-project"
-          resource_type = "project"
-          roles         = ["storage:roles/storage.objectViewer:my-bucket-name"]
-        },
-        {
-          # Regional resource-specific permission
-          resource_id   = "my-project"
-          resource_type = "project"
-          location      = "us-west1"
-          roles         = ["artifact-registry:artifactregistry.writer:my-repo"]
-        }
-      ]
-    }
-  }
-
-  wif_identity_roles = [ ... ]
 }
 ```
 
