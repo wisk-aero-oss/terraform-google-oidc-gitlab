@@ -13,6 +13,52 @@
  * - pre-commit setup
  * - GitHub actions setup
  *
+ *  ## Service Account Roles Examples
+ *
+ *  The `roles` list for a binding can be:
+ *  - A simple role: `roles/viewer` (grants permission to the entire project/folder/org).
+ *  - A resource-specific role: `RESOURCE_TYPE:ROLE:RESOURCE_NAME` (e.g. `artifact-registry:roles/artifactregistry.reader:my-repo`).
+ *
+ *  #### Project and Resource specific permissions
+ *
+ *  ```hcl
+ *  module "oidc_gitlab" {
+ *    source     = "wisk-aero-oss/oidc-gitlab/google"
+ *    project_id = "my-project"
+ *
+ *    # Optional global location
+ *    location = "global"
+ *
+ *    service_accounts = {
+ *      "my-sa" = {
+ *        display_name = "My Service Account"
+ *        description  = "SA for GitLab CI"
+ *        project      = "my-project"
+ *        attributes   = [ ... ]
+ *        bindings = [
+ *          {
+ *            # Project-level permission without specific location
+ *            resource_id   = "my-project"
+ *            resource_type = "project"
+ *            roles         = ["roles/compute.viewer"]
+ *          },
+ *          {
+ *            # Regional resource-specific permission
+ *            resource_id   = "my-project"
+ *            resource_type = "project"
+ *            location      = "us-central1"
+ *            roles         = [
+ *              "roles/compute.viewer",
+ *              "artifact-registry:roles/artifactregistry.reader:my-repo"
+ *            ]
+ *          }
+ *        ]
+ *      }
+ *    }
+ *
+ *    wif_identity_roles = [ ... ]
+ *  }
+ *  ```
  */
 
 # WIF in 1 project
@@ -166,16 +212,43 @@ locals {
       "${s}::${attribute.pool}::${attribute.attribute}"
     ]
   ])
-  # service_account::resource_type::resource_id::role
+
+  # service_account::resource_type::resource_id::role::location
   sa_roles = flatten([
     for s, sa in var.service_accounts :
     [
       for b, binding in sa.bindings : [
         for role in binding.roles :
-        "${s}::${binding.resource_type}::${binding.resource_id}::${role}"
+        "${s}::${binding.resource_type}::${binding.resource_id}::${role}::${binding.location != null ? binding.location : ""}"
       ]
     ]
   ])
+
+  sa_permissions_config = {
+    for binding in toset(local.sa_roles) : binding => {
+      folder_id        = "folder" == split("::", binding)[1] ? split("::", binding)[2] : ""
+      project_id       = "project" == split("::", binding)[1] ? split("::", binding)[2] : ""
+      organization_id  = "organization" == split("::", binding)[1] ? split("::", binding)[2] : var.organization_id
+      default_location = split("::", binding)[4] != "" ? split("::", binding)[4] : var.location
+      members = [
+        {
+          member = google_service_account.sa[split("::", binding)[0]].member
+          roles = length(split(":", split("::", binding)[3])) < 3 ? [
+            {
+              role     = split("::", binding)[3]
+              location = split("::", binding)[4] != "" ? split("::", binding)[4] : var.location
+            }
+            ] : [
+            {
+              resource = "${split(":", (split("::", binding)[3]))[0]}:${split(":", (split("::", binding)[3]))[2]}"
+              role     = split(":", (split("::", binding)[3]))[1]
+              location = split("::", binding)[4] != "" ? split("::", binding)[4] : var.location
+            }
+          ]
+        }
+      ]
+    }
+  }
 }
 # Attributes - Grant WIF identity access to impersonate service account
 resource "google_service_account_iam_member" "wif-sa" {
@@ -222,25 +295,13 @@ module "sa_permissions" {
   source  = "wisk-aero-oss/iam-members/google"
   version = "0.2.2"
 
-  for_each = toset([for binding in local.sa_roles : binding])
+  for_each = local.sa_permissions_config
 
-  folder_id       = "folder" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
-  project_id      = "project" == split("::", each.value)[1] ? split("::", each.value)[2] : ""
-  organization_id = "organization" == split("::", each.value)[1] ? split("::", each.value)[2] : var.organization_id
-  #project_id = module.projects[split("::", each.value)[0]].project_id
-  members = [
-    {
-      member = google_service_account.sa[split("::", each.value)[0]].member
-      roles = length(split(":", split("::", each.value)[3])) < 3 ? [
-        { role = split("::", each.value)[3] }
-        ] : [
-        {
-          resource = join(":", [for i in [0, 2] : split(":", (split("::", each.value)[3]))[i]])
-          role     = split(":", (split("::", each.value)[3]))[1]
-        }
-      ]
-    }
-  ]
+  folder_id        = each.value.folder_id
+  project_id       = each.value.project_id
+  organization_id  = each.value.organization_id
+  default_location = each.value.default_location
+  members          = each.value.members
 }
 
 #resource "google_folder_iam_member" "sa" {

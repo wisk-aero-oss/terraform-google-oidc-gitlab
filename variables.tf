@@ -64,6 +64,12 @@ variable "organization_id" {
   default     = ""
 }
 
+variable "location" {
+  description = "GCP Location for access to regional roles"
+  type        = string
+  default     = null
+}
+
 variable "service_accounts" {
   description = "Service account to manage and link to WIF"
   type = map(object({
@@ -77,6 +83,7 @@ variable "service_accounts" {
     bindings = list(object({
       resource_id   = string
       resource_type = string
+      location      = optional(string, null)
       roles         = list(string)
     }))
     can_impersonate = optional(list(string), [])
