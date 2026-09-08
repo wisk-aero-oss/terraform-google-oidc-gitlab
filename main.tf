@@ -74,37 +74,63 @@ resource "google_iam_workload_identity_pool" "main" {
   for_each                  = var.wif_pools
   project                   = var.project_id
   workload_identity_pool_id = each.key
-  display_name              = each.value.display_name
+  display_name              = each.value.display_name != "" ? each.value.display_name : each.key
   description               = each.value.description
   disabled                  = false
 }
+
+locals {
+  wif_providers = merge(flatten([
+    for pool_key, pool in var.wif_pools : {
+      for provider_key, provider in pool.providers :
+      "${pool_key}::${provider_key}" => {
+        pool_id             = pool_key
+        provider_id         = provider_key
+        display_name        = provider.display_name != "" ? provider.display_name : provider_key
+        description         = provider.description
+        attribute_condition = provider.attribute_condition != "" ? provider.attribute_condition : null
+        attribute_mapping   = provider.attribute_mapping != null ? provider.attribute_mapping : var.attribute_mapping
+        issuer_uri          = provider.issuer_uri != null && provider.issuer_uri != "" ? provider.issuer_uri : var.issuer_uri
+        is_private          = provider.private_server != null ? provider.private_server : var.private_server
+        allowed_audiences   = provider.allowed_audiences != null ? provider.allowed_audiences : var.allowed_audiences
+        jwks_json           = provider.jwks_json
+        disabled            = provider.disabled
+      }
+    }
+  ])...)
+
+  # Collect all unique private issuer URIs that require JWKS HTTP discovery
+  private_issuer_uris = toset([
+    for k, p in local.wif_providers :
+    p.issuer_uri if p.is_private && p.jwks_json == null
+  ])
+}
+
 # FIX: whitespace always changes
 data "http" "jwk" {
-  count = var.private_server ? 1 : 0
-  url   = "${var.issuer_uri}/oauth/discovery/keys"
+  for_each = local.private_issuer_uris
+  url      = "${each.value}/oauth/discovery/keys"
 }
 
 #trivy:ignore:AVD-GCP-0068
 resource "google_iam_workload_identity_pool_provider" "main" {
-  for_each = merge(flatten([ # convert to colasped map
-    for poolkey, pool in var.wif_pools :
-    { for providerkey, provider in pool.providers :
-      "${poolkey}::${providerkey}" => provider
-    }
-  ])...)
+  for_each = local.wif_providers
 
   project                            = var.project_id
-  workload_identity_pool_id          = google_iam_workload_identity_pool.main[split("::", each.key)[0]].workload_identity_pool_id
-  workload_identity_pool_provider_id = split("::", each.key)[1]
+  workload_identity_pool_id          = google_iam_workload_identity_pool.main[each.value.pool_id].workload_identity_pool_id
+  workload_identity_pool_provider_id = each.value.provider_id
   display_name                       = each.value.display_name
   description                        = each.value.description
+  disabled                           = each.value.disabled
   attribute_condition                = each.value.attribute_condition
-  # attribute_condition = "assertion.namespace_path.startsWith(\"${var.gitlab_namespace_path}\")"
-  attribute_mapping = var.attribute_mapping
+  attribute_mapping                  = each.value.attribute_mapping
+
   oidc {
-    allowed_audiences = var.private_server ? [] : var.allowed_audiences
-    issuer_uri        = var.issuer_uri
-    jwks_json         = var.private_server ? data.http.jwk[0].response_body : ""
+    allowed_audiences = each.value.is_private ? [] : each.value.allowed_audiences
+    issuer_uri        = each.value.issuer_uri
+    jwks_json = each.value.jwks_json != null ? each.value.jwks_json : (
+      each.value.is_private ? data.http.jwk[each.value.issuer_uri].response_body : ""
+    )
   }
 }
 

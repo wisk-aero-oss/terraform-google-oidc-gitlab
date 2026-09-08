@@ -106,19 +106,24 @@ variable "wif_identity_roles" {
     roles     = list(string)
   }))
 }
-# Create pool per GitLab team ??
-# TODO: add support for multiple pools
+
 variable "wif_pools" {
-  description = "Workload Identity Federation Pools"
+  description = "Workload Identity Federation (WIF) Pools"
   type = map(object({
     # key = pool ID
     description  = string
-    display_name = string
+    display_name = optional(string, "")
     providers = map(object({
-      # key provider ID
+      # key = provider ID
       description         = string
-      display_name        = string
+      display_name        = optional(string, "")
       attribute_condition = optional(string, "")
+      attribute_mapping   = optional(map(string))
+      allowed_audiences   = optional(list(string))
+      issuer_uri          = optional(string)
+      private_server      = optional(bool)
+      jwks_json           = optional(string)
+      disabled            = optional(bool, false)
     }))
   }))
   default = {}
