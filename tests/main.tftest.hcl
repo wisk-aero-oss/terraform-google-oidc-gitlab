@@ -40,7 +40,8 @@ variables {
           location      = "us-central1"
           roles = [
             "roles/compute.viewer",
-            "artifact-registry:roles/artifactregistry.reader:my-repo"
+            "artifact-registry:roles/artifactregistry.reader:my-repo",
+            "bigquery-table:bigquery.dataViewer:dataset:table"
           ]
         }
       ]
@@ -92,6 +93,17 @@ run "verify_sa_permissions_logic" {
   assert {
     condition     = local.sa_permissions_config["test-sa::project::test-project::artifact-registry:roles/artifactregistry.reader:my-repo::us-central1"].members[0].roles[0].role == "roles/artifactregistry.reader"
     error_message = "Artifact registry role name should be correctly extracted"
+  }
+
+  # Verify multi-token resource role construction (e.g. bigquery-table)
+  assert {
+    condition     = local.sa_permissions_config["test-sa::project::test-project::bigquery-table:bigquery.dataViewer:dataset:table::us-central1"].members[0].roles[0].resource == "bigquery-table:dataset:table"
+    error_message = "Multi-token resource role should preserve all trailing tokens in resource"
+  }
+
+  assert {
+    condition     = local.sa_permissions_config["test-sa::project::test-project::bigquery-table:bigquery.dataViewer:dataset:table::us-central1"].members[0].roles[0].role == "bigquery.dataViewer"
+    error_message = "Multi-token role name should be correctly extracted"
   }
 }
 
