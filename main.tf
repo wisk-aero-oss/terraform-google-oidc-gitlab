@@ -266,7 +266,7 @@ locals {
             }
             ] : [
             {
-              resource = "${split(":", (split("::", binding)[3]))[0]}:${split(":", (split("::", binding)[3]))[2]}"
+              resource = "${split(":", (split("::", binding)[3]))[0]}:${join(":", slice(split(":", (split("::", binding)[3])), 2, length(split(":", (split("::", binding)[3])))))}"
               role     = split(":", (split("::", binding)[3]))[1]
               location = try(split("::", binding)[4], null) != null ? split("::", binding)[4] : var.location
             }
